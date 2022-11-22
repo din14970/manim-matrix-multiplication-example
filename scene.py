@@ -80,33 +80,50 @@ class MatrixMultiplication(Slide):
             sr_c = SurroundingRectangle(col, color=RED)
             last_element = None
             self.add(sr_r, sr_c)
+
             g = []
+            element_animations = []
+
             for j, (re, ce) in enumerate(zip(row, col)):
                 _re = re.copy()
                 _ce = ce.copy()
+
                 if last_element is None:
-                    self.play(_re.animate.next_to(mA, DOWN))
+                    _re.next_to(mA, DOWN)
                 else:
-                    self.play(_re.animate.next_to(last_element))
+                    _re.next_to(last_element)
+                re_copy = re.copy()
+                g.append(re_copy)
+                element_animations.append(
+                    re_copy.animate.move_to(_re.get_center())
+                )
+
                 times = MathTex('\\times', color=WHITE, font_size = 20)
                 times.next_to(_re)
-                self.play(Write(times))
-                self.play(_ce.animate.next_to(times, RIGHT))
-                g.append(_re)
+                element_animations.append(Write(times))
                 g.append(times)
-                g.append(_ce)
+
+                _ce.next_to(times, RIGHT)
+                ce_copy = ce.copy()
+                g.append(ce_copy)
+                element_animations.append(
+                    ce_copy.animate.move_to(_ce.get_center())
+                )
                 if j < n - 1:
                     plus = Tex("+", color=WHITE, font_size = 20)
                     plus.next_to(_ce, RIGHT)
-                    self.play(Write(plus))
-                    last_element = plus
+                    element_animations.append(Write(plus))
                     g.append(plus)
+                    last_element = plus
+
             gg = VGroup(*g)
+            self.play(*element_animations)
+            self.pause()
             self.play(Transform(gg, c_element))
             self.pause()
             self.remove(sr_r, sr_c)
 
-        self.pause()
+        self.wait()
 
 
 class MatrixGPU(Slide):
@@ -132,17 +149,17 @@ class MatrixGPU(Slide):
             table_values,
             include_outer_lines=True,
         )
-        grid.scale(0.8)
+        grid.scale(0.9)
         rows_a = mA.get_rows()
         cols_b = mB.get_columns()
         rows_c = grid.get_rows()
         cols_c = grid.get_columns()
         move_ra = (
-            _ra.animate.next_to(_rc, LEFT).shift(0.5*LEFT)
+            _ra.animate.scale(0.5).next_to(_rc, LEFT).shift(1*LEFT)
             for _ra, _rc in zip(rows_a, rows_c)
         )
         move_cb = (
-            _cb.animate.next_to(_cc, UP).shift(0.5*UP)
+            _cb.animate.scale(0.5).next_to(_cc, UP).shift(0.5*UP)
             for _cb, _cc in zip(cols_b, cols_c)
         )
 
@@ -210,26 +227,66 @@ multiply_kernel[
         self.pause()
 
         motions = []
-        grd_entries = grid.get_entries()
+        element_groups = []
+        grid_entries = grid.get_entries()
+        group_positions = []
 
-        for row_a in rows_a:
-            for col_b in cols_b:
-                _g = VGroup()
-                last_object = None
-                for i, (rea, ceb) in enumerate(zip(row_a, col_b)):
-                    times = MathTex('\\times', color=WHITE, font_size = 20)
-                    _g.add(rea.copy())
-                    _g.add(times)
-                    _g.add(ceb.copy())
-                    if last_object is not None:
-                        rea.next_to(last_object)
-                    times.next_to(rea)
-                    ceb.next_to(times)
-                    if i < n - 1:
-                        plus = Tex("+", color=WHITE, font_size = 20)
-                        _g.add(plus)
-                        plus.next_to_ceb
-                        last_object = plus
-                    _g.align_to(grd_entries[i])
+        for i, grid_entry in enumerate(grid_entries):
+            location = grid_entry.get_center()
+            group_positions.append(location)
 
+            r = i // n
+            c = i % n
+            row_a = rows_a[r]
+            col_b = cols_b[c]
+
+            _g_positioning = []
+            _g_animation = []
+            last_element = None
+
+            for j, (re, ce) in enumerate(zip(row_a, col_b)):
+                _re = re.copy()
+                if last_element is not None:
+                    _re.next_to(last_element)
+                times = MathTex('\\times', color=WHITE, font_size = 10)
+                times.next_to(_re)
+                _ce = ce.copy()
+                _ce.next_to(times, RIGHT)
+                _g_positioning = _g_positioning + [_re, times, _ce]
+
+                re_copy = re.copy()
+                ce_copy = ce.copy()
+                _g_animation = _g_animation + [re_copy, times, ce_copy]
+                if j < n - 1:
+                    plus = Tex("+", color=WHITE, font_size = 10)
+                    plus.next_to(_ce, RIGHT)
+                    _g_positioning.append(plus)
+                    _g_animation.append(plus)
+                    last_element = plus
+
+            _ggpos = VGroup(*_g_positioning)
+            _ggpos.move_to(location)
+            for i, (pos_elem, anim_elem) in enumerate(zip(_ggpos, _g_animation)):
+                if i % 2 == 0:
+                    # it is an element
+                    location = pos_elem.get_center()
+                    motions.append(anim_elem.animate.move_to(location))
+                else:
+                    motions.append(Write(anim_elem))
+
+            element_groups.append(VGroup(*_g_animation))
+
+        self.play(FadeOut(grid_entries))
+        self.play(*motions)
         self.pause()
+
+        answers = Matrix(C).get_entries()
+        answer_animations = []
+        for _group, answer, pos in zip(element_groups, answers, group_positions):
+            answer.move_to(pos)
+            answer_animations.append(Transform(_group, answer))
+
+        self.play(*answer_animations)
+        self.pause()
+
+        self.wait()
