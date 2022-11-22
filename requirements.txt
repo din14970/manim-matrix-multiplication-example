@@ -1,0 +1,4 @@
+manim==0.16.0.post0
+manim-presentation==0.2.1
+opencv-python==4.6.0.66
+
